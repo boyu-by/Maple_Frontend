@@ -8,6 +8,7 @@
     @mousemove="onMouseMove"
     @mouseup="onMouseUp"
     @dblclick="onDblClick"
+    @contextmenu="onContextMenu"
   >
     <canvas ref="canvasRef" :width="canvasWidth" :height="canvasHeight"></canvas>
 
@@ -68,8 +69,9 @@ const dragNodeId = ref(null)//被拖拽节点的id
 const dragOffsetX = ref(0)//节点拖拽偏量（相对于节点左上角）
 const dragOffsetY = ref(0)//节点拖拽偏量（相对于节点左上角）
 const dragNodeIds = ref([])//被拖拽的所有节点ID（包括子孙节点）
-const dragNodePositions = reactive({})//被拖拽节点的初始位置
+const dragNodePositions = ref({})//被拖拽节点的初始位置
 const hasNodeMoved = ref(false)//节点是否真的被移动了
+const isRightClickDrag = ref(false)// 右键拖拽模式（单独移动节点，不移动子节点）
 
 //画布平移
 const panStartX = ref(0)//平移起始X坐标
@@ -346,7 +348,7 @@ function findNodeAt(canvasX, canvasY) {
 function getNodeAndDescendants(nodeId) {
   const result = [nodeId]
   const node = nodes.value[nodeId]
-  if (node && node.children) {
+  if (node && !node.collapsed && node.children) {
     for (const childId of node.children) {
       result.push(...getNodeAndDescendants(childId))
     }
@@ -533,6 +535,12 @@ function deleteConnection(parentId, childId) {
 
 
 //事件处理函数
+// 右键菜单处理
+function onContextMenu(e) {
+  // 始终阻止右键默认菜单，因为我们实现了右键拖拽功能
+  e.preventDefault()
+}
+
 //滚轮缩放（以鼠标落点为中心）
 function onWheel(e) {
   e.preventDefault()//阻止页面默认行为
@@ -694,8 +702,16 @@ function onMouseDown(e) {
     dragOffsetY.value = canvasY - hitNode.y
     hasNodeMoved.value = false // 重置移动标志
 
-    // 获取所有需要拖拽的节点（包括子孙节点）
-    dragNodeIds.value = getNodeAndDescendants(hitNode.id)
+    //区分左右键拖拽
+    isRightClickDrag.value = (e.button === 2)
+
+    if(isRightClickDrag.value){
+      //右键：获取当前节点
+      dragNodeIds.value = [hitNode.id]
+    }else{
+      //左键：获取所有需要拖拽的节点（包括子孙节点）
+      dragNodeIds.value = getNodeAndDescendants(hitNode.id)
+    }
 
     // 记录所有节点的初始位置
     dragNodePositions.value = {}
@@ -801,6 +817,7 @@ function onMouseUp(e) {
     dragNodeId.value = null
     dragNodeIds.value = []
     hasNodeMoved.value = false
+    isRightClickDrag.value = false  //重置右键拖拽标志
     // 修复内存泄漏：直接重置对象而不是逐个删除
     dragNodePositions.value = {}
   }
@@ -989,6 +1006,16 @@ function setLayoutDirection(direction) {
   relayoutNodes()
   scheduleDraw()
 }
+
+// 暴露给父组件的API接口
+defineExpose({
+  getMindMapData,
+  loadMindMapData,
+  exportAsPNG,
+  clearCanvas,
+  getLayoutDirection,
+  setLayoutDirection
+})
 </script>
 
 <style scoped>

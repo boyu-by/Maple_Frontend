@@ -1,4 +1,3 @@
-// src/types/mindmap.js
 
 /**
  * @typedef {Object} Node
