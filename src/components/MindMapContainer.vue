@@ -146,7 +146,11 @@ defineExpose({
   getSelectedConnection: () => selectedConnection.value,
   getUndoStack: () => mindMapCanvasRef.value?.getUndoStack?.() || [],
   getRedoStack: () => mindMapCanvasRef.value?.getRedoStack?.() || [],
-  getScale: () => mindMapCanvasRef.value?.getScale?.() || 1
+  getScale: () => mindMapCanvasRef.value?.getScale?.() || 1,
+  
+  // 创建节点模式相关方法
+  toggleCreateNodeMode: () => mindMapCanvasRef.value?.toggleCreateNodeMode?.(),
+  getCreateNodeMode: () => mindMapCanvasRef.value?.getCreateNodeMode?.() || false
 })
 </script>
 

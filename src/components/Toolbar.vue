@@ -3,15 +3,7 @@
     <!-- 左侧 Logo 和标题 -->
     <div class="toolbar-left">
       <div class="logo">
-        <svg class="logo-icon" viewBox="0 0 24 24" width="28" height="28">
-          <defs>
-            <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
-              <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
-            </linearGradient>
-          </defs>
-          <path fill="url(#logoGradient)" d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z"/>
-        </svg>
+        <span class="logo-icon">🍁</span>
         <span class="logo-text">Maple</span>
       </div>
     </div>
@@ -195,10 +187,11 @@ function handleFileOpen(event) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 32px;
-  height: 80px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  padding: 10px 16px;
+  height: 52px;
+  width: 100%;
+  background: linear-gradient(135deg, #E63946 0%, #FF6B35 50%, #F4A261 100%);
+  box-shadow: 0 4px 20px rgba(230, 57, 70, 0.3);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   position: relative;
   z-index: 100;
@@ -217,17 +210,17 @@ function handleFileOpen(event) {
 .toolbar-left {
   display: flex;
   align-items: center;
-  min-width: 250px;
+  min-width: 140px;
   flex-shrink: 0;
 }
 
 .logo {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   color: white;
   font-weight: 700;
-  font-size: 24px;
+  font-size: 20px;
   letter-spacing: -0.5px;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   cursor: pointer;
@@ -239,23 +232,45 @@ function handleFileOpen(event) {
 }
 
 .logo-icon {
+  font-size: 24px;
+  line-height: 1;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
 }
 
 .toolbar-center {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   flex: 1;
   justify-content: center;
   min-width: 0;
+  padding: 0 8px;
+  overflow-x: auto;
+}
+
+.toolbar-center::-webkit-scrollbar {
+  height: 4px;
+}
+
+.toolbar-center::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+
+.toolbar-center::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+}
+
+.toolbar-center::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
 }
 
 .toolbar-group {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 12px;
+  gap: 4px;
+  padding: 0 6px;
   border-right: 1px solid rgba(255, 255, 255, 0.15);
   flex-shrink: 0;
 }
@@ -267,8 +282,8 @@ function handleFileOpen(event) {
 .toolbar-right {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: 250px;
+  gap: 6px;
+  min-width: 140px;
   justify-content: flex-end;
   flex-shrink: 0;
 }
@@ -277,13 +292,13 @@ function handleFileOpen(event) {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 6px 9px;
+  gap: 4px;
+  padding: 5px 8px;
   border: none;
   background: rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
+  border-radius: 6px;
   color: rgba(255, 255, 255, 0.9);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -291,6 +306,7 @@ function handleFileOpen(event) {
   backdrop-filter: blur(10px);
   position: relative;
   overflow: hidden;
+  min-width: 60px;
 }
 
 .tool-btn::before {
@@ -328,20 +344,21 @@ function handleFileOpen(event) {
 }
 
 .tool-btn.delete-btn:hover:not(:disabled) {
-  background: rgba(220, 53, 69, 0.3);
-  box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+  background: rgba(139, 69, 19, 0.4);
+  box-shadow: 0 4px 12px rgba(139, 69, 19, 0.3);
 }
 
 .layout-btn.active {
   background: rgba(255, 255, 255, 0.3);
   color: white;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 12px rgba(255, 140, 66, 0.4);
   border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .layout-btn.active:hover {
   background: rgba(255, 255, 255, 0.4);
   color: white;
+  box-shadow: 0 4px 12px rgba(255, 140, 66, 0.5);
 }
 
 /* 响应式设计 */
@@ -349,75 +366,83 @@ function handleFileOpen(event) {
   .tool-btn span {
     display: none;
   }
-  
+
   .tool-btn {
-    padding: 6px;
+    padding: 5px 6px;
+    min-width: 32px;
   }
-  
+
   .toolbar-left,
   .toolbar-right {
-    min-width: 200px;
+    min-width: 120px;
+  }
+
+  .toolbar-group {
+    padding: 0 4px;
+    gap: 3px;
   }
 }
 
 @media (max-width: 768px) {
   .toolbar {
     height: auto;
-    padding: 16px 20px;
+    padding: 8px 12px;
     flex-wrap: wrap;
-    gap: 16px;
+    gap: 8px;
   }
-  
+
   .toolbar-left,
   .toolbar-right {
     min-width: auto;
     flex: 1;
   }
-  
+
   .toolbar-left {
     justify-content: flex-start;
   }
-  
+
   .toolbar-right {
     justify-content: flex-end;
   }
-  
+
   .toolbar-center {
     order: 2;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 4px;
     justify-content: center;
     width: 100%;
   }
-  
+
   .toolbar-group {
     border-right: none;
-    padding: 0 6px;
+    padding: 0 3px;
+    gap: 3px;
   }
-  
+
   .tool-btn {
-    padding: 6px;
+    padding: 5px 6px;
+    min-width: 32px;
   }
 }
 
 @media (max-width: 480px) {
   .toolbar {
-    padding: 12px 16px;
-    gap: 12px;
+    padding: 6px 10px;
+    gap: 6px;
   }
-  
+
   .toolbar-left {
     flex: 1;
   }
-  
+
   .logo-text {
-    font-size: 20px;
+    font-size: 18px;
   }
-  
+
   .toolbar-center {
     display: none;
   }
-  
+
   .toolbar-right {
     flex: 0 0 auto;
   }

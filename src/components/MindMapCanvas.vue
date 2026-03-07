@@ -9,7 +9,7 @@
     @mouseup="onMouseUp"
     @mouseleave="onMouseLeave"
     @dblclick="onDblClick"
-    @contextmenu="onContextMenu"
+    @contextmenu.prevent="onContextMenu"
   >
     <canvas ref="canvasRef"></canvas>
 
@@ -130,12 +130,21 @@ const isRightClickDrag = ref(false)
 const panStartX = ref(0)
 const panStartY = ref(0)
 
+// 自动平移相关状态
+const isAutoPanning = ref(false)
+let autoPanAnimationFrameId = null
+const edgeThreshold = 50 // 边缘触发阈值（像素）
+const autoPanSpeed = 15 // 自动平移速度（像素/帧）
+
 const selectedNodeId = ref(null)
 const selectedConnection = ref(null)
 
 const editingNodeId = ref(null)
 const editingText = ref('')
 const editorPosition = reactive({ x: 0, y: 0 })
+
+// 创建节点模式
+const isCreateNodeMode = ref(false)
 
 const isSpacePressed = ref(false)
 const layoutDirection = ref('left-right')
@@ -162,6 +171,9 @@ onUnmounted(() => {
   
   // 停止高亮动画
   stopHighlightAnimation()
+  
+  // 停止自动平移
+  stopAutoPan()
   
   window.removeEventListener('keydown', handleKeyDown)
   window.removeEventListener('keyup', handleKeyUp)
@@ -201,10 +213,13 @@ function handleResize() {
 
 // ==================== 撤销/重做功能 ====================
 function emitStateChanged() {
+  // 获取当前布局方向
+  const currentLayout = getLayoutDirection()
+  
   emit('state-changed', {
     selectedNodeId: selectedNodeId.value,
     selectedConnection: selectedConnection.value,
-    layout: layoutDirection.value,
+    layout: currentLayout,
     canUndo: undoStack.value.length > 0,
     canRedo: redoStack.value.length > 0
   })
@@ -275,7 +290,7 @@ function initDemoData() {
   
   // 世界坐标系，中心为0,0
   nodes.value = {
-    '1': { id: '1', text: '根节点', x: -50, y: -20, width: 100, height: 40, parentId: null, children: ['2', '3'], collapsed: false },
+    '1': { id: '1', text: '根节点', x: -50, y: -20, width: 100, height: 40, parentId: null, children: ['2', '3'], collapsed: false, layoutDirection: 'left-right' },
     '2': { id: '2', text: '子节点1', x: 100, y: -70, width: 100, height: 40, parentId: '1', children: [], collapsed: false },
     '3': { id: '3', text: '子节点2', x: 100, y: 30, width: 100, height: 40, parentId: '1', children: [], collapsed: false },
   }
@@ -336,6 +351,108 @@ function fitToScreen() {
   transform.offsetY = -contentCenterY * transform.scale
   
   scheduleDraw()
+}
+
+// ==================== 自动平移系统 ====================
+function startAutoPan(mouseX, mouseY, containerWidth, containerHeight) {
+  if (isAutoPanning.value) return
+  
+  isAutoPanning.value = true
+  
+  function autoPanLoop() {
+    if (!isAutoPanning.value || !isDraggingNode.value) {
+      stopAutoPan()
+      return
+    }
+    
+    // 计算鼠标相对于容器的位置
+    const rect = containerRef.value.getBoundingClientRect()
+    const relativeMouseX = mouseX - rect.left
+    const relativeMouseY = mouseY - rect.top
+    
+    let panX = 0
+    let panY = 0
+    
+    // 检测左边缘
+    if (relativeMouseX < edgeThreshold) {
+      panX = autoPanSpeed
+    }
+    // 检测右边缘
+    else if (relativeMouseX > containerWidth - edgeThreshold) {
+      panX = -autoPanSpeed
+    }
+    
+    // 检测上边缘
+    if (relativeMouseY < edgeThreshold) {
+      panY = autoPanSpeed
+    }
+    // 检测下边缘
+    else if (relativeMouseY > containerHeight - edgeThreshold) {
+      panY = -autoPanSpeed
+    }
+    
+    // 如果需要平移
+    if (panX !== 0 || panY !== 0) {
+      transform.offsetX += panX
+      transform.offsetY += panY
+      
+      // 同时移动正在拖动的节点
+      if (dragNodeId.value) {
+        const worldPoint = transform.screenToWorld(
+          relativeMouseX,
+          relativeMouseY,
+          containerWidth,
+          containerHeight
+        )
+        
+        let newRootX = worldPoint.x - dragOffsetX.value
+        let newRootY = worldPoint.y - dragOffsetY.value
+        
+        const deltaX = newRootX - dragNodePositions.value[dragNodeId.value].x
+        const deltaY = newRootY - dragNodePositions.value[dragNodeId.value].y
+        
+        for (const nodeId of dragNodeIds.value) {
+          const node = nodes.value[nodeId]
+          if (node) {
+            node.x = dragNodePositions.value[nodeId].x + deltaX
+            node.y = dragNodePositions.value[nodeId].y + deltaY
+          }
+        }
+      }
+      
+      scheduleDraw()
+    }
+    
+    autoPanAnimationFrameId = requestAnimationFrame(autoPanLoop)
+  }
+  
+  autoPanAnimationFrameId = requestAnimationFrame(autoPanLoop)
+}
+
+function stopAutoPan() {
+  isAutoPanning.value = false
+  if (autoPanAnimationFrameId) {
+    cancelAnimationFrame(autoPanAnimationFrameId)
+    autoPanAnimationFrameId = null
+  }
+}
+
+function checkEdgeAndAutoPan(mouseX, mouseY, containerWidth, containerHeight) {
+  const rect = containerRef.value.getBoundingClientRect()
+  const relativeMouseX = mouseX - rect.left
+  const relativeMouseY = mouseY - rect.top
+  
+  // 检查鼠标是否在边缘区域
+  const isNearLeftEdge = relativeMouseX < edgeThreshold
+  const isNearRightEdge = relativeMouseX > containerWidth - edgeThreshold
+  const isNearTopEdge = relativeMouseY < edgeThreshold
+  const isNearBottomEdge = relativeMouseY > containerHeight - edgeThreshold
+  
+  if (isNearLeftEdge || isNearRightEdge || isNearTopEdge || isNearBottomEdge) {
+    startAutoPan(mouseX, mouseY, containerWidth, containerHeight)
+  } else {
+    stopAutoPan()
+  }
 }
 
 // ==================== 高亮动画系统 ====================
@@ -504,7 +621,30 @@ function drawLines(visibleNodeIds) {
       const parent = nodes.value[node.parentId]
       let startX, startY, endX, endY
 
-      if (layoutDirection.value === 'left-right') {
+      // 获取父节点的布局方向
+      // 如果父节点本身是一个根节点（在rootIds数组中），并且有自己的布局方向，则使用自己的布局方向
+      // 否则，继承其根节点的布局方向
+      let parentLayoutDirection = parent.layoutDirection
+      
+      // 如果父节点本身是一个根节点，并且有自己的布局方向，则使用自己的布局方向
+      if (rootIds.value.includes(parent.id) && parentLayoutDirection) {
+        // 使用父节点自己的布局方向
+      } else if (!parentLayoutDirection && parent.parentId) {
+        // 如果父节点没有布局方向，则继承其根节点的布局方向
+        let rootNode = nodes.value[parent.parentId]
+        while (rootNode && rootNode.parentId && !rootIds.value.includes(rootNode.id)) {
+          rootNode = nodes.value[rootNode.parentId]
+        }
+        if (rootNode && rootNode.layoutDirection) {
+          parentLayoutDirection = rootNode.layoutDirection
+        }
+      }
+      
+      if (!parentLayoutDirection) {
+        parentLayoutDirection = 'left-right' // 默认布局方向
+      }
+
+      if (parentLayoutDirection === 'left-right') {
         startX = parent.x + parent.width
         startY = parent.y + parent.height / 2
         endX = node.x
@@ -535,7 +675,7 @@ function drawLines(visibleNodeIds) {
         ctx.value.shadowBlur = 0
       }
       
-      if (layoutDirection.value === 'left-right') {
+      if (parentLayoutDirection === 'left-right') {
         // 水平布局：使用三次贝塞尔曲线
         const cp1X = startX + (endX - startX) * 0.5
         const cp1Y = startY
@@ -849,11 +989,46 @@ function toggleNodeCollapse(nodeId) {
 }
 
 function toggleLayoutDirection() {
-  layoutDirection.value = layoutDirection.value === 'left-right' ? 'top-bottom' : 'left-right'
-  relayoutNodes()
-  saveState()
+  // 如果有选中的节点，找到其根节点并切换布局方向
+  if (selectedNodeId.value) {
+    const node = nodes.value[selectedNodeId.value]
+    if (node) {
+      // 找到根节点
+      let rootNode = node
+      while (rootNode.parentId && nodes.value[rootNode.parentId]) {
+        rootNode = nodes.value[rootNode.parentId]
+      }
+      
+      // 切换根节点的布局方向
+      rootNode.layoutDirection = rootNode.layoutDirection === 'left-right' ? 'top-bottom' : 'left-right'
+      
+      // 重新布局该根节点及其子树
+      layoutSubtree(rootNode.id, rootNode.x, rootNode.y)
+      
+      // 保存状态
+      saveState()
+      
+      // 触发状态变化事件
+      emit('layout-changed', rootNode.layoutDirection)
+    }
+  } else if (rootIds.value.length > 0) {
+    // 如果没有选中节点，但存在根节点，切换第一个根节点的布局方向
+    const rootNode = nodes.value[rootIds.value[0]]
+    if (rootNode) {
+      rootNode.layoutDirection = rootNode.layoutDirection === 'left-right' ? 'top-bottom' : 'left-right'
+      
+      // 重新布局该根节点及其子树
+      layoutSubtree(rootNode.id, rootNode.x, rootNode.y)
+      
+      // 保存状态
+      saveState()
+      
+      // 触发状态变化事件
+      emit('layout-changed', rootNode.layoutDirection)
+    }
+  }
+  
   scheduleDraw()
-  emit('layout-changed', layoutDirection.value)
 }
 
 // ==================== 树形布局算法 ====================
@@ -869,7 +1044,30 @@ function calculateSubtreeSize(nodeId) {
   // 递归计算所有子树的尺寸
   const childSizes = node.children.map(childId => calculateSubtreeSize(childId))
   
-  if (layoutDirection.value === 'left-right') {
+  // 获取节点的布局方向
+  // 如果节点本身是一个根节点（在rootIds数组中），并且有自己的布局方向，则使用自己的布局方向
+  // 否则，继承其根节点的布局方向
+  let nodeLayoutDirection = node.layoutDirection
+  
+  // 如果节点本身是一个根节点，并且有自己的布局方向，则使用自己的布局方向
+  if (rootIds.value.includes(nodeId) && nodeLayoutDirection) {
+    // 使用节点自己的布局方向
+  } else if (!nodeLayoutDirection && node.parentId) {
+    // 如果节点没有布局方向，则继承其根节点的布局方向
+    let rootNode = nodes.value[node.parentId]
+    while (rootNode && rootNode.parentId && !rootIds.value.includes(rootNode.id)) {
+      rootNode = nodes.value[rootNode.parentId]
+    }
+    if (rootNode && rootNode.layoutDirection) {
+      nodeLayoutDirection = rootNode.layoutDirection
+    }
+  }
+  
+  if (!nodeLayoutDirection) {
+    nodeLayoutDirection = 'left-right' // 默认布局方向
+  }
+  
+  if (nodeLayoutDirection === 'left-right') {
     // 左右布局：子树垂直排列
     const totalHeight = childSizes.reduce((sum, size) => sum + size.height, 0)
     const maxWidth = Math.max(...childSizes.map(size => size.width))
@@ -912,9 +1110,32 @@ function layoutSubtree(nodeId, x, y) {
     return
   }
   
+  // 获取节点的布局方向
+  // 如果节点本身是一个根节点（在rootIds数组中），并且有自己的布局方向，则使用自己的布局方向
+  // 否则，继承其根节点的布局方向
+  let nodeLayoutDirection = node.layoutDirection
+  
+  // 如果节点本身是一个根节点，并且有自己的布局方向，则使用自己的布局方向
+  if (rootIds.value.includes(nodeId) && nodeLayoutDirection) {
+    // 使用节点自己的布局方向
+  } else if (!nodeLayoutDirection && node.parentId) {
+    // 如果节点没有布局方向，则继承其根节点的布局方向
+    let rootNode = nodes.value[node.parentId]
+    while (rootNode && rootNode.parentId && !rootIds.value.includes(rootNode.id)) {
+      rootNode = nodes.value[rootNode.parentId]
+    }
+    if (rootNode && rootNode.layoutDirection) {
+      nodeLayoutDirection = rootNode.layoutDirection
+    }
+  }
+  
+  if (!nodeLayoutDirection) {
+    nodeLayoutDirection = 'left-right' // 默认布局方向
+  }
+  
   const gap = 20
   
-  if (layoutDirection.value === 'left-right') {
+  if (nodeLayoutDirection === 'left-right') {
     // 左右布局：子节点垂直排列
     const childX = x + node.width + gap
     
@@ -1026,32 +1247,16 @@ function addChildNode(parentId) {
   if (!parent) return
 
   const newId = `node_${++nodeIdCounter}`
-  let newNode
-
-  if (layoutDirection.value === 'left-right') {
-    newNode = {
-      id: newId,
-      text: '新节点',
-      x: parent.x + parent.width + 50,
-      y: parent.y,
-      width: 100,
-      height: 40,
-      parentId: parentId,
-      children: [],
-      collapsed: false
-    }
-  } else {
-    newNode = {
-      id: newId,
-      text: '新节点',
-      x: parent.x,
-      y: parent.y + parent.height + 50,
-      width: 100,
-      height: 40,
-      parentId: parentId,
-      children: [],
-      collapsed: false
-    }
+  const newNode = {
+    id: newId,
+    text: '新节点',
+    x: parent.x,
+    y: parent.y,
+    width: 100,
+    height: 40,
+    parentId: parentId,
+    children: [],
+    collapsed: false
   }
 
   nodes.value[newId] = newNode
@@ -1059,6 +1264,9 @@ function addChildNode(parentId) {
 
   updateNodeSize(newNode)
   selectedNodeId.value = newId
+  
+  // 重新布局父节点及其子树，避免节点重叠
+  layoutSubtree(parentId, parent.x, parent.y)
   
   // 启动创建动画：从父节点位置移动到目标位置
   const fromX = parent.x + parent.width / 2 - newNode.width / 2
@@ -1086,32 +1294,16 @@ function addSiblingNode() {
   if (!parent) return
   
   const newId = `node_${++nodeIdCounter}`
-  let newNode
-  
-  if (layoutDirection.value === 'left-right') {
-    newNode = {
-      id: newId,
-      text: '新节点',
-      x: selectedNode.x + selectedNode.width + 50,
-      y: selectedNode.y,
-      width: 100,
-      height: 40,
-      parentId: parentId,
-      children: [],
-      collapsed: false
-    }
-  } else {
-    newNode = {
-      id: newId,
-      text: '新节点',
-      x: selectedNode.x,
-      y: selectedNode.y + selectedNode.height + 50,
-      width: 100,
-      height: 40,
-      parentId: parentId,
-      children: [],
-      collapsed: false
-    }
+  const newNode = {
+    id: newId,
+    text: '新节点',
+    x: selectedNode.x,
+    y: selectedNode.y,
+    width: 100,
+    height: 40,
+    parentId: parentId,
+    children: [],
+    collapsed: false
   }
   
   nodes.value[newId] = newNode
@@ -1119,6 +1311,9 @@ function addSiblingNode() {
   
   updateNodeSize(newNode)
   selectedNodeId.value = newId
+  
+  // 重新布局父节点及其子树，避免同级节点重叠
+  layoutSubtree(parentId, parent.x, parent.y)
   
   // 启动创建动画：从父节点位置移动到目标位置
   const fromX = parent.x + parent.width / 2 - newNode.width / 2
@@ -1140,7 +1335,8 @@ function createRootNode(x, y) {
     height: 40,
     parentId: null,
     children: [],
-    collapsed: false
+    collapsed: false,
+    layoutDirection: 'left-right' // 默认布局方向
   }
 
   nodes.value[newId] = newNode
@@ -1163,7 +1359,30 @@ function findConnectionAt(worldX, worldY) {
       const parent = nodes.value[node.parentId]
       let startX, startY, endX, endY
 
-      if (layoutDirection.value === 'left-right') {
+      // 获取父节点的布局方向
+      // 如果父节点本身是一个根节点（在rootIds数组中），并且有自己的布局方向，则使用自己的布局方向
+      // 否则，继承其根节点的布局方向
+      let parentLayoutDirection = parent.layoutDirection
+      
+      // 如果父节点本身是一个根节点，并且有自己的布局方向，则使用自己的布局方向
+      if (rootIds.value.includes(parent.id) && parentLayoutDirection) {
+        // 使用父节点自己的布局方向
+      } else if (!parentLayoutDirection && parent.parentId) {
+        // 如果父节点没有布局方向，则继承其根节点的布局方向
+        let rootNode = nodes.value[parent.parentId]
+        while (rootNode && rootNode.parentId && !rootIds.value.includes(rootNode.id)) {
+          rootNode = nodes.value[rootNode.parentId]
+        }
+        if (rootNode && rootNode.layoutDirection) {
+          parentLayoutDirection = rootNode.layoutDirection
+        }
+      }
+      
+      if (!parentLayoutDirection) {
+        parentLayoutDirection = 'left-right' // 默认布局方向
+      }
+
+      if (parentLayoutDirection === 'left-right') {
         startX = parent.x + parent.width
         startY = parent.y + parent.height / 2
         endX = node.x
@@ -1233,7 +1452,10 @@ function deleteConnection(parentId, childId) {
 
 // ==================== 事件处理（成熟的交互系统）====================
 function onContextMenu(e) {
+  // 完全阻止浏览器的右键菜单和手势
   e.preventDefault()
+  e.stopPropagation()
+  return false
 }
 
 function onWheel(e) {
@@ -1256,10 +1478,11 @@ function onWheel(e) {
 }
 
 function handleKeyDown(e) {
-  if (e.code === 'Space' && !isSpacePressed.value) {
-    isSpacePressed.value = true
-    e.preventDefault()
-    containerRef.value.style.cursor = 'grab'
+  // 检查焦点是否在AI聊天窗口中
+  const activeElement = document.activeElement
+  const isInChatWindow = activeElement && activeElement.closest('.chat-window')
+  if (isInChatWindow) {
+    // 如果焦点在AI聊天窗口中，不处理键盘快捷键
     return
   }
 
@@ -1349,12 +1572,19 @@ function handleKeyDown(e) {
     e.preventDefault()
     return
   }
+
+  if (e.code === 'Space') {
+    isSpacePressed.value = true
+    e.preventDefault()
+    return
+  }
 }
 
 function handleKeyUp(e) {
   if (e.code === 'Space') {
     isSpacePressed.value = false
-    containerRef.value.style.cursor = 'default'
+    e.preventDefault()
+    return
   }
 }
 
@@ -1370,7 +1600,79 @@ function onMouseDown(e) {
   // 转换为世界坐标
   const worldPoint = transform.screenToWorld(mouseX, mouseY, rect.width, rect.height)
   
-  if (isSpacePressed.value) {
+  // 左键（button === 0）
+  if (e.button === 0) {
+    // 在创建节点模式下，左键点击空白处创建节点
+    if (isCreateNodeMode.value) {
+      const hitNode = findNodeAt(worldPoint.x, worldPoint.y)
+      const hitConnection = findConnectionAt(worldPoint.x, worldPoint.y)
+      
+      // 只有点击空白处才创建节点
+      if (!hitNode && !hitConnection) {
+        createRootNode(worldPoint.x, worldPoint.y)
+
+        const newNodeId = selectedNodeId.value
+        if (newNodeId && nodes.value[newNodeId]) {
+          const newNode = nodes.value[newNodeId]
+          isDraggingNode.value = true
+          dragNodeId.value = newNodeId
+          dragOffsetX.value = worldPoint.x - newNode.x
+          dragOffsetY.value = worldPoint.y - newNode.y
+          hasNodeMoved.value = false
+          isRightClickDrag.value = false
+          dragNodeIds.value = [newNodeId]
+          dragNodePositions.value = {
+            [newNodeId]: { x: newNode.x, y: newNode.y }
+          }
+        }
+      }
+      e.preventDefault()
+      return
+    }
+    
+    // 非创建节点模式下，左键点击节点则拖动节点，否则平移画布
+    const hitNode = findNodeAt(worldPoint.x, worldPoint.y)
+    if (hitNode) {
+      // 左键拖动节点
+      selectedNodeId.value = hitNode.id
+      selectedConnection.value = null
+      isDraggingNode.value = true
+      dragNodeId.value = hitNode.id
+      dragOffsetX.value = worldPoint.x - hitNode.x
+      dragOffsetY.value = worldPoint.y - hitNode.y
+      hasNodeMoved.value = false
+
+      isRightClickDrag.value = false
+      // 如果按住空格键，只拖动单个节点；否则拖动所有子节点
+      if (isSpacePressed.value) {
+        dragNodeIds.value = [hitNode.id]
+      } else {
+        dragNodeIds.value = getNodeAndDescendants(hitNode.id)
+      }
+
+      dragNodePositions.value = {}
+      for (const nodeId of dragNodeIds.value) {
+        const node = nodes.value[nodeId]
+        dragNodePositions.value[nodeId] = { x: node.x, y: node.y }
+      }
+
+      if (containerRef.value) {
+        containerRef.value.focus()
+      }
+
+      // 触发状态变化事件以更新UI
+      emitStateChanged()
+      
+      // 启动高亮动画
+      if (hitNode) {
+        startHighlightAnimation(hitNode.id)
+      }
+
+      e.preventDefault()
+      return
+    }
+    
+    // 左键点击空白处，平移画布
     isPanning.value = true
     panStartX.value = e.clientX
     panStartY.value = e.clientY
@@ -1379,69 +1681,14 @@ function onMouseDown(e) {
     return
   }
   
-  const hitNode = findNodeAt(worldPoint.x, worldPoint.y)
-  if (hitNode) {
-    selectedNodeId.value = hitNode.id
-    selectedConnection.value = null
-    isDraggingNode.value = true
-    dragNodeId.value = hitNode.id
-    dragOffsetX.value = worldPoint.x - hitNode.x
-    dragOffsetY.value = worldPoint.y - hitNode.y
-    hasNodeMoved.value = false
-
-    isRightClickDrag.value = (e.button === 2)
-
-    if (isRightClickDrag.value) {
-      dragNodeIds.value = [hitNode.id]
-    } else {
-      dragNodeIds.value = getNodeAndDescendants(hitNode.id)
-    }
-
-    dragNodePositions.value = {}
-    for (const nodeId of dragNodeIds.value) {
-      const node = nodes.value[nodeId]
-      dragNodePositions.value[nodeId] = { x: node.x, y: node.y }
-    }
-
-    if (containerRef.value) {
-      containerRef.value.focus()
-    }
-
-    // 触发状态变化事件以更新UI
-    emitStateChanged()
-    
-    // 启动高亮动画
-    if (hitNode) {
-      startHighlightAnimation(hitNode.id)
-    }
-
+  // 右键（button === 2）平移画布
+  if (e.button === 2) {
+    isPanning.value = true
+    panStartX.value = e.clientX
+    panStartY.value = e.clientY
+    containerRef.value.style.cursor = 'grabbing'
     e.preventDefault()
-  } else {
-    const hitConnection = findConnectionAt(worldPoint.x, worldPoint.y)
-    if (hitConnection) {
-      selectedConnection.value = hitConnection
-      selectedNodeId.value = null
-      e.preventDefault()
-    } else {
-      selectedNodeId.value = null
-      selectedConnection.value = null
-      createRootNode(worldPoint.x, worldPoint.y)
-
-      const newNodeId = selectedNodeId.value
-      if (newNodeId && nodes.value[newNodeId]) {
-        const newNode = nodes.value[newNodeId]
-        isDraggingNode.value = true
-        dragNodeId.value = newNodeId
-        dragOffsetX.value = worldPoint.x - newNode.x
-        dragOffsetY.value = worldPoint.y - newNode.y
-        hasNodeMoved.value = false
-        isRightClickDrag.value = false
-        dragNodeIds.value = [newNodeId]
-        dragNodePositions.value = {
-          [newNodeId]: { x: newNode.x, y: newNode.y }
-        }
-      }
-    }
+    return
   }
 }
 
@@ -1480,6 +1727,9 @@ function onMouseMove(e) {
     const mouseX = e.clientX - rect.left
     const mouseY = e.clientY - rect.top
     
+    // 检查是否接近边缘并触发自动平移
+    checkEdgeAndAutoPan(e.clientX, e.clientY, rect.width, rect.height)
+    
     const worldPoint = transform.screenToWorld(mouseX, mouseY, rect.width, rect.height)
     const rootNode = nodes.value[dragNodeId.value]
     if (rootNode) {
@@ -1508,6 +1758,9 @@ function onMouseMove(e) {
 }
 
 function onMouseUp(e) {
+  // 停止自动平移
+  stopAutoPan()
+  
   if (isPanning.value) {
     isPanning.value = false
     containerRef.value.style.cursor = isSpacePressed.value ? 'grab' : 'default'
@@ -1650,13 +1903,80 @@ function clearCanvas() {
 }
 
 function getLayoutDirection() {
-  return layoutDirection.value
+  // 如果有选中的节点，返回其根节点的布局方向
+  if (selectedNodeId.value) {
+    const node = nodes.value[selectedNodeId.value]
+    if (node) {
+      // 找到根节点
+      let rootNode = node
+      while (rootNode.parentId && nodes.value[rootNode.parentId]) {
+        rootNode = nodes.value[rootNode.parentId]
+      }
+      
+      // 返回根节点的布局方向
+      return rootNode.layoutDirection || 'left-right'
+    }
+  } else if (rootIds.value.length > 0) {
+    // 如果没有选中节点，但存在根节点，返回第一个根节点的布局方向
+    const rootNode = nodes.value[rootIds.value[0]]
+    if (rootNode) {
+      return rootNode.layoutDirection || 'left-right'
+    }
+  }
+  
+  return 'left-right' // 默认布局方向
 }
 
 function setLayoutDirection(direction) {
-  layoutDirection.value = direction
-  relayoutNodes()
+  // 如果有选中的节点，找到其根节点并设置布局方向
+  if (selectedNodeId.value) {
+    const node = nodes.value[selectedNodeId.value]
+    if (node) {
+      // 找到根节点
+      let rootNode = node
+      while (rootNode.parentId && nodes.value[rootNode.parentId]) {
+        rootNode = nodes.value[rootNode.parentId]
+      }
+      
+      // 设置根节点的布局方向
+      rootNode.layoutDirection = direction
+      
+      // 重新布局该根节点及其子树
+      layoutSubtree(rootNode.id, rootNode.x, rootNode.y)
+      
+      // 保存状态
+      saveState()
+      
+      // 触发状态变化事件
+      emit('layout-changed', direction)
+    }
+  } else if (rootIds.value.length > 0) {
+    // 如果没有选中节点，但存在根节点，设置第一个根节点的布局方向
+    const rootNode = nodes.value[rootIds.value[0]]
+    if (rootNode) {
+      rootNode.layoutDirection = direction
+      
+      // 重新布局该根节点及其子树
+      layoutSubtree(rootNode.id, rootNode.x, rootNode.y)
+      
+      // 保存状态
+      saveState()
+      
+      // 触发状态变化事件
+      emit('layout-changed', direction)
+    }
+  }
+  
   scheduleDraw()
+}
+
+// ==================== 创建节点模式 ====================
+function toggleCreateNodeMode() {
+  isCreateNodeMode.value = !isCreateNodeMode.value
+}
+
+function getCreateNodeMode() {
+  return isCreateNodeMode.value
 }
 
 // 暴露给父组件的API接口
@@ -1681,7 +2001,9 @@ defineExpose({
   zoomOut,
   resetView,
   fitToScreen,
-  centerView
+  centerView,
+  toggleCreateNodeMode,
+  getCreateNodeMode
 })
 </script>
 
@@ -1694,6 +2016,12 @@ defineExpose({
   cursor: default;
   outline: none;
   background-color: #f5f5f5;
+  /* 禁用浏览器手势和选择 */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
 }
 
 canvas {

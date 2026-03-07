@@ -1,17 +1,12 @@
 <template>
   <div class="chat-window" :class="{ 'collapsed': isCollapsed }">
     <!-- 折叠按钮 -->
-    <button 
-      class="toggle-btn" 
+    <button
+      class="toggle-btn"
       @click="toggleCollapse"
       :title="isCollapsed ? '展开聊天窗口' : '折叠聊天窗口'"
     >
-      <svg v-if="isCollapsed" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-      </svg>
-      <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-      </svg>
+      <span class="toggle-icon">🍁</span>
     </button>
 
     <!-- 聊天窗口内容 -->
@@ -31,17 +26,11 @@
           :class="message.role"
         >
           <div class="message-avatar">
-            <svg v-if="message.role === 'user'" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-              <circle cx="12" cy="7" r="4"></circle>
-            </svg>
-            <svg v-else width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"></path>
-              <path d="M12 6v6l4 2"></path>
-            </svg>
+            <span v-if="message.role === 'user'" class="avatar-icon">👤</span>
+            <span v-else class="avatar-icon">🍁</span>
           </div>
           <div class="message-content">
-            <div class="message-text">{{ message.content }}</div>
+            <div class="message-text" v-html="parseMarkdown(message.content)"></div>
             <div class="message-time">{{ formatTime(message.timestamp) }}</div>
           </div>
         </div>
@@ -49,10 +38,7 @@
         <!-- 加载动画 -->
         <div v-if="isLoading" class="message assistant">
           <div class="message-avatar">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"></path>
-              <path d="M12 6v6l4 2"></path>
-            </svg>
+            <span class="avatar-icon">🍁</span>
           </div>
           <div class="message-content">
             <div class="typing-indicator">
@@ -86,9 +72,9 @@
           @click="sendMessage"
           :disabled="!inputMessage.trim() || isLoading"
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="22" y1="2" x2="11" y2="13"></line>
-            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          <svg class="send-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 2L11 13"></path>
+            <path d="M22 2L15 22L11 13L2 9L22 2"></path>
           </svg>
         </button>
       </div>
@@ -98,6 +84,23 @@
 
 <script setup>
 import { ref, nextTick, watch } from 'vue'
+
+// 简单的Markdown解析函数
+function parseMarkdown(text) {
+  if (!text) return ''
+  
+  // 替换换行符为<br>
+  text = text.replace(/\n/g, '<br>')
+  
+  // 替换粗体
+  text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+  
+  // 替换列表
+  text = text.replace(/^- (.*?)$/gm, '<li>$1</li>')
+  text = text.replace(/(<li>.*?<\/li>)/gs, '<ul>$1</ul>')
+  
+  return text
+}
 
 // 响应式数据
 const isCollapsed = ref(false)
@@ -181,26 +184,39 @@ async function sendMessage() {
   }
 }
 
-// 调用后端 API（预留接口）
+// 调用后端 API
 async function callBackendAPI(message) {
-  // TODO: 替换为实际的后端 API 调用
-  // 示例：
-  // const response = await fetch('/api/chat', {
-  //   method: 'POST',
-  //   headers: {
-  //     'Content-Type': 'application/json',
-  //   },
-  //   body: JSON.stringify({ message }),
-  // })
-  // const data = await response.json()
-  // return data.reply
-
-  // 模拟 API 响应
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(`我收到了你的消息："${message}"。这是一个模拟响应，请连接实际的后端 API。`)
-    }, 1000)
-  })
+  try {
+    const response = await fetch('/api/agent/suggest', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: `topic=${encodeURIComponent(message)}`,
+    })
+    
+    if (!response.ok) {
+      throw new Error('API 调用失败')
+    }
+    
+    // 尝试解析响应，处理不同的响应格式
+    const text = await response.text()
+    try {
+      // 尝试解析为JSON
+      const data = JSON.parse(text)
+      // 检查是否是错误响应
+      if (data.error) {
+        throw new Error(data.error)
+      }
+      return data
+    } catch (jsonError) {
+      // 如果不是JSON，直接返回文本
+      return text
+    }
+  } catch (error) {
+    console.error('调用 AI 接口失败:', error)
+    throw error
+  }
 }
 
 // 滚动到底部
@@ -247,12 +263,34 @@ defineExpose({
   top: 60px;
   bottom: 0;
   width: 380px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  box-shadow: 2px 0 20px rgba(0, 0, 0, 0.1);
+  background: linear-gradient(135deg, #E63946 0%, #FF6B35 50%, #F4A261 100%);
+  box-shadow: 2px 0 20px rgba(230, 57, 70, 0.3);
   z-index: 1000;
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+}
+
+.chat-window::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+}
+
+.chat-window::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+  pointer-events: none;
 }
 
 .chat-window.collapsed {
@@ -261,26 +299,48 @@ defineExpose({
 
 .toggle-btn {
   position: absolute;
-  right: -40px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 40px;
-  height: 40px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  right: 10px;
+  top: 10px;
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.2);
   border: none;
-  border-radius: 0 8px 8px 0;
+  border-radius: 8px;
   color: white;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   transition: all 0.3s ease;
+  overflow: hidden;
+  z-index: 1001;
+}
+
+.toggle-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.05) 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.toggle-btn:hover::before {
+  opacity: 1;
 }
 
 .toggle-btn:hover {
-  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
-  box-shadow: 2px 0 15px rgba(102, 126, 234, 0.4);
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.toggle-btn:active {
+  transform: scale(0.95);
 }
 
 .chat-content {
@@ -291,12 +351,15 @@ defineExpose({
 
 .chat-header {
   padding: 20px;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
   display: flex;
   align-items: center;
   gap: 10px;
+  position: relative;
+  z-index: 1;
 }
 
 .chat-header h3 {
@@ -304,6 +367,8 @@ defineExpose({
   color: white;
   font-size: 18px;
   font-weight: 600;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  letter-spacing: 0.5px;
 }
 
 .status-dot {
@@ -312,11 +377,23 @@ defineExpose({
   border-radius: 50%;
   background-color: #ff4757;
   box-shadow: 0 0 10px rgba(255, 71, 87, 0.5);
+  animation: pulse 2s ease-in-out infinite;
 }
 
 .status-dot.online {
   background-color: #2ed573;
   box-shadow: 0 0 10px rgba(46, 213, 115, 0.5);
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
 }
 
 .messages-container {
@@ -379,11 +456,23 @@ defineExpose({
 }
 
 .message.user .message-avatar {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #E63946 0%, #FF6B35 50%, #F4A261 100%);
+  box-shadow: 0 4px 12px rgba(230, 57, 70, 0.3);
 }
 
 .message.assistant .message-avatar {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  background: linear-gradient(135deg, #E63946 0%, #FF6B35 50%, #F4A261 100%);
+  box-shadow: 0 4px 12px rgba(230, 57, 70, 0.3);
+}
+
+.toggle-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.avatar-icon {
+  font-size: 20px;
+  line-height: 1;
 }
 
 .message-content {
@@ -398,18 +487,22 @@ defineExpose({
   border-radius: 16px;
   line-height: 1.5;
   word-wrap: break-word;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .message.user .message-text {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #E63946 0%, #FF6B35 50%, #F4A261 100%);
   color: white;
   border-bottom-right-radius: 4px;
+  box-shadow: 0 4px 12px rgba(230, 57, 70, 0.3);
 }
 
 .message.assistant .message-text {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.98);
   color: #333;
   border-bottom-left-radius: 4px;
+  text-align: left;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .message-time {
@@ -425,16 +518,17 @@ defineExpose({
   display: flex;
   gap: 4px;
   padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.98);
   border-radius: 16px;
   border-bottom-left-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .typing-indicator span {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #667eea;
+  background: linear-gradient(135deg, #E63946 0%, #FF6B35 50%, #F4A261 100%);
   animation: typing 1.4s infinite;
 }
 
@@ -476,18 +570,21 @@ defineExpose({
 
 .input-area {
   padding: 16px;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
   display: flex;
   gap: 10px;
   align-items: flex-end;
+  position: relative;
+  z-index: 1;
 }
 
 .input-area textarea {
   flex: 1;
-  background: rgba(255, 255, 255, 0.95);
-  border: none;
+  background: rgba(255, 255, 255, 0.98);
+  border: 2px solid transparent;
   border-radius: 20px;
   padding: 12px 16px;
   font-size: 14px;
@@ -497,11 +594,14 @@ defineExpose({
   min-height: 44px;
   max-height: 120px;
   font-family: inherit;
-  transition: box-shadow 0.3s ease;
+  transition: all 0.3s ease;
+  color: #333;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .input-area textarea:focus {
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
+  border-color: rgba(230, 57, 70, 0.3);
+  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1), 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .input-area textarea::placeholder {
@@ -511,7 +611,7 @@ defineExpose({
 .send-btn {
   width: 44px;
   height: 44px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #E63946 0%, #FF6B35 50%, #F4A261 100%);
   border: none;
   border-radius: 50%;
   color: white;
@@ -521,27 +621,49 @@ defineExpose({
   justify-content: center;
   transition: all 0.3s ease;
   flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(230, 57, 70, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.send-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.05) 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.send-btn:hover::before {
+  opacity: 1;
 }
 
 .send-btn:hover:not(:disabled) {
-  transform: scale(1.05);
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+  transform: scale(1.1) rotate(5deg);
+  box-shadow: 0 6px 20px rgba(230, 57, 70, 0.5);
 }
 
 .send-btn:active:not(:disabled) {
-  transform: scale(0.95);
+  transform: scale(0.95) rotate(-5deg);
 }
 
 .send-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
+  transform: none;
 }
 
-.send-btn svg {
+.send-btn .send-icon {
   transition: transform 0.3s ease;
+  position: relative;
+  z-index: 1;
 }
 
-.send-btn:hover:not(:disabled) svg {
+.send-btn:hover:not(:disabled) .send-icon {
   transform: translateX(2px);
 }
 </style>

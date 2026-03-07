@@ -1,9 +1,9 @@
 <template>
   <div class="zoom-toolbar">
     <!-- 缩小按钮 -->
-    <button 
-      class="zoom-btn" 
-      @click="$emit('zoom-out')" 
+    <button
+      class="zoom-btn"
+      @click="$emit('zoom-out')"
       :disabled="zoomLevel <= minZoom"
       title="缩小 (Ctrl+-)"
     >
@@ -16,9 +16,9 @@
     </div>
 
     <!-- 放大按钮 -->
-    <button 
-      class="zoom-btn" 
-      @click="$emit('zoom-in')" 
+    <button
+      class="zoom-btn"
+      @click="$emit('zoom-in')"
       :disabled="zoomLevel >= maxZoom"
       title="放大 (Ctrl++)"
     >
@@ -29,22 +29,60 @@
     <div class="zoom-divider"></div>
 
     <!-- 重置视图按钮 -->
-    <button 
-      class="zoom-btn reset-btn" 
-      @click="$emit('reset-view')" 
+    <button
+      class="zoom-btn reset-btn"
+      @click="$emit('reset-view')"
       title="重置视图"
     >
       <span class="icon">↺</span>
     </button>
 
     <!-- 适应屏幕按钮 -->
-    <button 
-      class="zoom-btn fit-btn" 
-      @click="$emit('fit-to-screen')" 
+    <button
+      class="zoom-btn fit-btn"
+      @click="$emit('fit-to-screen')"
       title="适应屏幕"
     >
       <span class="icon">⊞</span>
     </button>
+
+    <!-- 分隔线 -->
+    <div class="zoom-divider"></div>
+
+    <!-- 创建节点模式按钮 -->
+    <button
+      class="zoom-btn create-node-btn"
+      @click="handleToggleCreateNodeMode"
+      :class="{ active: isCreateNodeMode }"
+      title="创建节点模式"
+    >
+      <span class="icon">+</span>
+      <span class="btn-text">创建节点模式</span>
+    </button>
+
+    <!-- 创建版本按钮 -->
+    <button
+      class="zoom-btn version-btn"
+      @click="$emit('create-version')"
+      title="创建版本"
+    >
+      <span class="icon">↓</span>
+    </button>
+
+    <!-- 版本历史按钮 -->
+    <button
+      class="zoom-btn version-btn"
+      @click="$emit('show-versions')"
+      title="版本历史"
+    >
+      <span class="icon">≡</span>
+    </button>
+  </div>
+
+  <!-- 固定状态窗口 -->
+  <div class="status-panel" :class="{ active: isCreateNodeMode }">
+    <div class="status-icon">{{ isCreateNodeMode ? '✓' : '○' }}</div>
+    <div class="status-text">{{ isCreateNodeMode ? '创建节点模式' : '普通模式' }}</div>
   </div>
 </template>
 
@@ -63,10 +101,14 @@ const props = defineProps({
   maxZoom: {
     type: Number,
     default: 5
+  },
+  isCreateNodeMode: {
+    type: Boolean,
+    default: false
   }
 })
 
-defineEmits(['zoom-in', 'zoom-out', 'reset-view', 'fit-to-screen'])
+const emit = defineEmits(['zoom-in', 'zoom-out', 'reset-view', 'fit-to-screen', 'create-version', 'show-versions', 'toggle-create-node-mode'])
 
 const isZoomChanging = ref(false)
 
@@ -77,6 +119,11 @@ watch(() => props.zoomLevel, () => {
     isZoomChanging.value = false
   }, 300)
 })
+
+// 处理创建节点模式切换
+function handleToggleCreateNodeMode() {
+  emit('toggle-create-node-mode')
+}
 </script>
 
 <style scoped>
@@ -85,16 +132,16 @@ watch(() => props.zoomLevel, () => {
   align-items: center;
   gap: 6px;
   padding: 10px 16px;
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.95) 0%, rgba(118, 75, 162, 0.95) 100%);
+  background: linear-gradient(135deg, #E63946 0%, #FF6B35 50%, #F4A261 100%);
   border-radius: 16px;
-  box-shadow: 
-    0 4px 20px rgba(0, 0, 0, 0.15),
+  box-shadow:
+    0 4px 20px rgba(230, 57, 70, 0.3),
     0 1px 3px rgba(0, 0, 0, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -302,9 +349,64 @@ watch(() => props.zoomLevel, () => {
 }
 
 .reset-btn:hover:not(:disabled),
-.fit-btn:hover:not(:disabled) {
+.fit-btn:hover:not(:disabled),
+.version-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.3);
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 6px 20px rgba(230, 57, 70, 0.4);
+}
+
+/* 创建节点模式按钮 */
+.create-node-btn {
+  position: relative;
+  width: auto;
+  min-width: 40px;
+  padding: 0 12px;
+  gap: 6px;
+}
+
+.create-node-btn .btn-text {
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.create-node-btn.active {
+  background: rgba(255, 255, 255, 0.4);
+  box-shadow:
+    0 0 0 3px rgba(255, 255, 255, 0.5),
+    0 6px 20px rgba(230, 57, 70, 0.5);
+}
+
+.create-node-btn.active::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  border-radius: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  animation: pulse-border 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-border {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.05);
+  }
+}
+
+.create-node-btn.active .icon {
+  transform: scale(1.2);
+  color: #fff;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
 }
 
 /* 动画效果 */
@@ -380,5 +482,48 @@ watch(() => props.zoomLevel, () => {
   .zoom-divider {
     height: 20px;
   }
+}
+
+/* 固定状态窗口 */
+.status-panel {
+  position: fixed;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 12px 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 1000;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+}
+
+.status-panel.active {
+  background: linear-gradient(135deg, #42b883 0%, #35a372 100%);
+  box-shadow: 0 4px 20px rgba(66, 184, 131, 0.4);
+}
+
+.status-icon {
+  font-size: 20px;
+  font-weight: bold;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+}
+
+.status-text {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 </style>
